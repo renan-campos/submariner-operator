@@ -359,7 +359,7 @@ func updateDNSConfigMap(client controllerClient.Client, k8sclientSet *clientset.
 	retryErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		configMap, err := configMaps.Get("coredns", metav1.GetOptions{})
 		if err != nil {
-			reqLogger.Error(err, "Config map is not found")
+			reqLogger.Error(err, "Error retrieving 'coredns' ConfigMap")
 			return err
 		}
 		/* This entry will be added to config map
@@ -371,7 +371,6 @@ func updateDNSConfigMap(client controllerClient.Client, k8sclientSet *clientset.
 		    forward . 2.2.2.2:5353
 		}
 		*/
-		corefile := configMap.Data["Corefile"]
 		lighthouseDnsService := &corev1.Service{}
 		err = client.Get(context.TODO(), types.NamespacedName{Name: lighthouseCoreDNSName, Namespace: cr.Namespace}, lighthouseDnsService)
 		lighthouseClusterIp := lighthouseDnsService.Spec.ClusterIP
@@ -384,14 +383,15 @@ func updateDNSConfigMap(client controllerClient.Client, k8sclientSet *clientset.
 			// Assume this means we've already set the ConfigMap up
 			return nil
 		coreFile := configMap.Data["Corefile"]
-		if strings.Contains(coreFile, "supercluster.local") {
+		if strings.Contains(coreFile, "clusterset.local") {
 			reqLogger.Info("coredns configmap has lighthouse configuration hence updating")
-			if strings.Contains(coreFile, lighthouseClusterIp) {
-				return nil
-			}
-			lines := strings.Split(corefile, "\n")
+			lines := strings.Split(coreFile, "\n")
 			for i, line := range lines {
-				if strings.Contains(line, "supercluster.local") {
+				if strings.Contains(line, "clusterset.local") {
+					if strings.Contains(lines[i+1], lighthouseClusterIp) {
+						return nil
+					}
+
 					lines[i+1] = "forward . " + lighthouseClusterIp
 					break
 				}
